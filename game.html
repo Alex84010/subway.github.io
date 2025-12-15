@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subway Surfers</title>
+
+  <link rel="shortcut icon" href="favicon.png" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <header>
+    <h1>Points : <span id="score">0</span></h1>
+    <h2>Meilleur Score : <span id="best-score">0</span></h2>
+    <h2>Points Totaux : <span id="top-score">0</span></h2>
+  </header>
+
+  <main>
+    <div id="game">
+      <div id="blocks"></div>
+      <div id="hero"></div>
+    </div>
+  </main>
+
+  <ul>
+    <li><a href="./index.html">Menu</a></li>
+    <li><a href="./game.html">Game</a></li>
+    <li><a href="./shop.html">Shop</a></li>
+  </ul>
+
+  <script src="script.js"></script>
+</body>
+
+<script>
+  const hero = document.getElementById("hero");
+  const block = document.getElementById("blocks");
+  const game = document.getElementById("game");
+  const scoreEl = document.getElementById("score");
+  const bestScoreEl = document.getElementById("best-score");
+  const highScoreEl = document.getElementById("top-score");
+
+  /* --------------------
+     ITEMS DE LA BOUTIQUE
+  -------------------- */
+  const shopItems = {
+    personnage: [
+      { id: "default", image: "images/personnage.png" },
+      { id: "personnage2", image: "images/personnage2.png" },
+    ],
+    terrain: [
+      { id: "default", image: "images/terrain.png" },
+      { id: "terrain2", image: "images/terrain2.png" },
+    ],
+    obstacle: [
+      { id: "default", image: "images/obstacle.png" },
+      { id: "obstacle2", image: "images/obstacle2.png" },
+    ],
+  };
+
+  /* --------------------
+     CHARGER LES SKINS ÉQUIPÉS
+  -------------------- */
+  function loadEquippedSkins() {
+    // Récupérer les items équipés
+    const equippedHero = localStorage.getItem("equipped_personnage") || "default";
+    const equippedTerrain = localStorage.getItem("equipped_terrain") || "default";
+    const equippedObstacle = localStorage.getItem("equipped_obstacle") || "default";
+
+    // Trouver les images correspondantes
+    const heroItem = shopItems.personnage.find(item => item.id === equippedHero);
+    const terrainItem = shopItems.terrain.find(item => item.id === equippedTerrain);
+    const obstacleItem = shopItems.obstacle.find(item => item.id === equippedObstacle);
+
+    // Appliquer les images
+    if (heroItem) {
+      hero.style.backgroundImage = `url('${heroItem.image}')`;
+    }
+    if (terrainItem) {
+      game.style.backgroundImage = `url('${terrainItem.image}')`;
+    }
+    if (obstacleItem) {
+      block.style.backgroundImage = `url('${obstacleItem.image}')`;
+    }
+  }
+
+  /* --------------------
+     CONFIGURATION
+  -------------------- */
+  const GAME_WIDTH = 360;
+  const LANES = 3;
+  const LANE_WIDTH = GAME_WIDTH / LANES;
+
+  const HERO_WIDTH = 80;
+
+  /* positions centrées sur chaque ligne */
+  const lanePositions = [
+    LANE_WIDTH * 0 + (LANE_WIDTH - HERO_WIDTH) / 2,
+    LANE_WIDTH * 1 + (LANE_WIDTH - HERO_WIDTH) / 2,
+    LANE_WIDTH * 2 + (LANE_WIDTH - HERO_WIDTH) / 2,
+  ];
+
+  let currentLane = 1;
+  let score = 0;
+  let lost = true;
+
+  /* --------------------
+     POSITION HERO
+  -------------------- */
+  function updateHeroPosition() {
+    hero.style.left = lanePositions[currentLane] + "px";
+  }
+
+  /* --------------------
+     DÉPLACEMENTS
+  -------------------- */
+  function moveLeft() {
+    if (currentLane > 0) currentLane--;
+    lost = false;
+    updateHeroPosition();
+  }
+
+  function moveRight() {
+    if (currentLane < LANES - 1) currentLane++;
+    lost = false;
+    updateHeroPosition();
+  }
+
+  /* --------------------
+     CLAVIER
+  -------------------- */
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft" || e.key === "a") moveLeft();
+    if (e.key === "ArrowRight" || e.key === "d") moveRight();
+  });
+
+  /* --------------------
+     OBSTACLE
+  -------------------- */
+  block.addEventListener("animationiteration", () => {
+    const randLane = Math.floor(Math.random() * LANES);
+    block.style.left = lanePositions[randLane] + "px";
+
+    if (!lost) {
+      score++;
+      scoreEl.textContent = score;
+    }
+  });
+
+  /* --------------------
+     COLLISIONS
+  -------------------- */
+  setInterval(() => {
+    const heroRect = hero.getBoundingClientRect();
+    const blockRect = block.getBoundingClientRect();
+
+    const collision =
+      heroRect.left < blockRect.right &&
+      heroRect.right > blockRect.left &&
+      heroRect.top < blockRect.bottom &&
+      heroRect.bottom > blockRect.top;
+
+    if (collision) endGame();
+  }, 20);
+
+  /* --------------------
+     FIN DE PARTIE
+  -------------------- */
+  function endGame() {
+    lost = true;
+    saveTotalPoints();
+    saveBestScore();
+    score = 0;
+    scoreEl.textContent = score;
+
+    currentLane = 1;
+    updateHeroPosition();
+  }
+
+  /* --------------------
+     POINTS TOTAUX
+  -------------------- */
+  function saveTotalPoints() {
+    // Récupérer les points totaux actuels
+    const currentTotal = Number(localStorage.getItem("totalPoints")) || 0;
+
+    // Ajouter le score de cette partie
+    const newTotal = currentTotal + score;
+
+    // Sauvegarder
+    localStorage.setItem("totalPoints", newTotal);
+
+    // Mettre à jour l'affichage
+    highScoreEl.textContent = newTotal;
+  }
+
+  /* --------------------
+     MEILLEUR SCORE
+  -------------------- */
+  function saveBestScore() {
+    // Récupérer le meilleur score actuel
+    const currentBest = Number(localStorage.getItem("bestScore")) || 0;
+
+    // Vérifier si le score actuel est meilleur
+    if (score > currentBest) {
+      localStorage.setItem("bestScore", score);
+      bestScoreEl.textContent = score;
+    }
+  }
+
+  /* --------------------
+     INIT
+  -------------------- */
+  window.addEventListener("load", () => {
+    // Charger les skins équipés
+    loadEquippedSkins();
+
+    // Afficher le meilleur score
+    bestScoreEl.textContent = localStorage.getItem("bestScore") || 0;
+
+    // Afficher les points totaux au chargement
+    highScoreEl.textContent = localStorage.getItem("totalPoints") || 0;
+    updateHeroPosition();
+  });
+
+</script>
+
+</html>
