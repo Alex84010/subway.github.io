@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boutique - Subway Surfers</title>
+  <link rel="shortcut icon" href="favicon.png" type="image/x-icon" />
+</head>
+
+<style>
+  /* RESET */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  /* PAGE */
+  body {
+    min-height: 100vh;
+    background: linear-gradient(to right, #da22ff, #9733ee);
+    font-family: "Segoe UI", Tahoma, sans-serif;
+  }
+
+  /* NAVIGATION */
+  ul.nav {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #333333;
+  }
+
+  ul.nav li {
+    float: left;
+  }
+
+  ul.nav li a {
+    display: block;
+    color: white;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+  }
+
+  ul.nav li a:hover:not(.active) {
+    background-color: #111111;
+  }
+
+  ul.nav li a.active {
+    background-color: #04AA6D;
+  }
+
+  /* HEADER */
+  header {
+    text-align: center;
+    padding: 30px 20px;
+    color: white;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+  }
+
+  .points-display {
+    font-size: 2rem;
+    color: #ffd700;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  /* BOUTIQUE */
+  .shop-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .category {
+    margin-bottom: 40px;
+  }
+
+  .category-title {
+    color: white;
+    font-size: 2rem;
+    margin-bottom: 20px;
+    text-align: center;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 25px;
+  }
+
+  /* CARTE ARTICLE */
+  .item-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease;
+    text-align: center;
+  }
+
+  .item-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .item-card.owned {
+    background: #e8f5e9;
+    border: 3px solid #4caf50;
+  }
+
+  .item-image {
+    width: 100%;
+    height: 150px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    background-color: #f0f0f0;
+  }
+
+  .item-name {
+    font-size: 1.5rem;
+    color: #333;
+    margin-bottom: 15px;
+  }
+
+  .item-price {
+    font-size: 1.3rem;
+    color: #da22ff;
+    font-weight: bold;
+    margin-bottom: 15px;
+  }
+
+  .buy-btn {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(to right, #da22ff, #9733ee);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .buy-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(218, 34, 255, 0.4);
+  }
+
+  .buy-btn:disabled {
+    background: #cccccc;
+    cursor: not-allowed;
+  }
+
+  .buy-btn.owned-btn {
+    background: #4caf50;
+  }
+
+  .buy-btn.equipped-btn {
+    background: #2196f3;
+  }
+
+  /* MESSAGE */
+  .message {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 15px 30px;
+    border-radius: 8px;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: bold;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .message.show {
+    opacity: 1;
+  }
+
+  .message.success {
+    background: #4caf50;
+  }
+
+  .message.error {
+    background: #f44336;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 600px) {
+    h1 {
+      font-size: 2rem;
+    }
+
+    .points-display {
+      font-size: 1.5rem;
+    }
+
+    .category-title {
+      font-size: 1.5rem;
+    }
+  }
+</style>
+
+<body>
+  <ul class="nav">
+    <li><a href="./index.html">Menu</a></li>
+    <li><a href="./game.html">Game</a></li>
+    <li><a class="active" href="./shop.html">Shop</a></li>
+  </ul>
+
+  <header>
+    <h1>Boutique</h1>
+    <div class="points-display">Points: <span id="total-points">0</span></div>
+  </header>
+
+  <div id="message" class="message"></div>
+
+  <div class="shop-container">
+    <div class="category">
+      <h2 class="category-title">Personnages</h2>
+      <div id="personnage-grid" class="items-grid"></div>
+    </div>
+
+    <div class="category">
+      <h2 class="category-title">Terrains</h2>
+      <div id="terrain-grid" class="items-grid"></div>
+    </div>
+
+    <div class="category">
+      <h2 class="category-title">Obstacles</h2>
+      <div id="obstacle-grid" class="items-grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const shopItems = {
+      personnage: [
+        {
+          id: "default",
+          name: "Classique",
+          price: 0,
+          image: "images/personnage.png",
+        },
+        {
+          id: "personnage2",
+          name: "Shiny",
+          price: 5,
+          image: "images/personnage2.png",
+        },
+      ],
+
+      terrain: [
+        {
+          id: "default",
+          name: "Route",
+          price: 0,
+          image: "images/terrain.png",
+        },
+        {
+          id: "terrain2",
+          name: "Herbe",
+          price: 8,
+          image: "images/terrain2.png",
+        },
+      ],
+
+      obstacle: [
+        {
+          id: "default",
+          name: "Caillou",
+          price: 0,
+          image: "images/obstacle.png",
+        },
+        {
+          id: "obstacle2",
+          name: "Caillou Jaune",
+          price: 3,
+          image: "images/obstacle2.png",
+        },
+      ],
+    };
+
+    // RÉCUPÉRER LES POINTS TOTAUX
+    function getTotalPoints() {
+      return Number(localStorage.getItem("totalPoints")) || 0;
+    }
+
+    // METTRE À JOUR L'AFFICHAGE DES POINTS
+    function updatePointsDisplay() {
+      document.getElementById("total-points").textContent = getTotalPoints();
+    }
+
+    // RÉCUPÉRER LES ITEMS POSSÉDÉS
+    function getOwnedItems(category) {
+      const owned = localStorage.getItem(`owned_${category}`);
+      return owned ? JSON.parse(owned) : ["default"];
+    }
+
+    // RÉCUPÉRER L'ITEM ÉQUIPÉ
+    function getEquippedItem(category) {
+      return localStorage.getItem(`equipped_${category}`) || "default";
+    }
+
+    // SAUVEGARDER UN ACHAT
+    function purchaseItem(category, itemId, price) {
+      const points = getTotalPoints();
+
+      if (points < price) {
+        showMessage("❌ Pas assez de points !", "error");
+        return false;
+      }
+
+      const owned = getOwnedItems(category);
+      if (!owned.includes(itemId)) {
+        owned.push(itemId);
+        localStorage.setItem(`owned_${category}`, JSON.stringify(owned));
+
+        // Déduire les points
+        const newPoints = points - price;
+        localStorage.setItem("totalPoints", newPoints);
+
+        updatePointsDisplay();
+        showMessage("✅ Achat réussi !", "success");
+        return true;
+      }
+
+      return false;
+    }
+
+    // ÉQUIPER UN ITEM
+    function equipItem(category, itemId) {
+      localStorage.setItem(`equipped_${category}`, itemId);
+      showMessage("✅ Item équipé !", "success");
+    }
+
+    // AFFICHER UN MESSAGE
+    function showMessage(text, type) {
+      const msg = document.getElementById("message");
+      msg.textContent = text;
+      msg.className = `message ${type} show`;
+
+      setTimeout(() => {
+        msg.classList.remove("show");
+      }, 2000);
+    }
+
+    // CRÉER UNE CARTE D'ITEM
+    function createItemCard(item, category) {
+      const owned = getOwnedItems(category);
+      const equipped = getEquippedItem(category);
+      const isOwned = owned.includes(item.id);
+      const isEquipped = equipped === item.id;
+
+      const card = document.createElement("div");
+      card.className = `item-card ${isOwned ? "owned" : ""}`;
+
+      const imageDiv = document.createElement("div");
+      imageDiv.className = "item-image";
+      imageDiv.style.backgroundImage = `url('${item.image}')`;
+
+      const name = document.createElement("div");
+      name.className = "item-name";
+      name.textContent = item.name;
+
+      const price = document.createElement("div");
+      price.className = "item-price";
+      price.textContent = item.price === 0 ? "Gratuit" : `💰 ${item.price} points`;
+
+      const button = document.createElement("button");
+      button.className = "buy-btn";
+
+      if (isEquipped) {
+        button.textContent = "✅ Équipé";
+        button.className += " equipped-btn";
+        button.disabled = true;
+      } else if (isOwned) {
+        button.textContent = "Équiper";
+        button.className += " owned-btn";
+        button.onclick = () => {
+          equipItem(category, item.id);
+          renderShop();
+        };
+      } else {
+        button.textContent = item.price === 0 ? "Obtenir" : "Acheter";
+        button.onclick = () => {
+          if (purchaseItem(category, item.id, item.price)) {
+            equipItem(category, item.id);
+            renderShop();
+          }
+        };
+      }
+
+      card.appendChild(imageDiv);
+      card.appendChild(name);
+      card.appendChild(price);
+      card.appendChild(button);
+
+      return card;
+    }
+
+    // AFFICHER LA BOUTIQUE
+    function renderShop() {
+      updatePointsDisplay();
+
+      Object.keys(shopItems).forEach(category => {
+        const grid = document.getElementById(`${category}-grid`);
+        grid.innerHTML = "";
+
+        shopItems[category].forEach(item => {
+          grid.appendChild(createItemCard(item, category));
+        });
+      });
+    }
+
+    // INITIALISATION
+    window.addEventListener("load", () => {
+      renderShop();
+    });
+  </script>
+</body>
+
+</html>
