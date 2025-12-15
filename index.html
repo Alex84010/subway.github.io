@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subway Surfers</title>
+
+  <link rel="shortcut icon" href="favicon.png" type="image/x-icon" />
+</head>
+
+<style>
+  /* RESET */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  /* PAGE */
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(to right, #da22ff, #9733ee);
+    font-family: "Segoe UI", Tahoma, sans-serif;
+  }
+
+  /* TITRES */
+  header {
+    text-align: center;
+    margin-bottom: 15px;
+  }
+
+  h1 {
+    color: #fff;
+    font-size: 2.5rem;
+  }
+
+  h2 {
+    color: rgba(0, 0, 0, 0.6);
+    font-size: 1.8rem;
+  }
+
+  /* JEU */
+  #game {
+    width: 360px;
+    height: 640px;
+    position: relative;
+    overflow: hidden;
+
+    background-image: url("images/terrain.png");
+    background-size: cover;
+    background-position: center;
+
+    border-radius: 8px;
+    outline: 2px solid #000;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+  }
+
+  /* PERSONNAGE */
+  #hero {
+    width: 80px;
+    height: 80px;
+
+    position: absolute;
+    bottom: 10px;
+    z-index: 10;
+
+    background-image: url("images/personnage.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  /* OBSTACLE */
+  #blocks {
+    width: 80px;
+    height: 80px;
+
+    position: absolute;
+    top: -80px;
+    z-index: 9;
+
+    background-image: url("images/obstacle.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+
+    animation: fall 0.9s linear infinite;
+  }
+
+  /* ANIMATION */
+  @keyframes fall {
+    from {
+      top: -80px;
+    }
+
+    to {
+      top: 640px;
+    }
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 400px) {
+    #game {
+      width: 90vw;
+      height: 160vw;
+    }
+  }
+
+  h2,
+  p {
+    margin: 10px;
+  }
+
+  ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #333333;
+  }
+
+  ul li {
+    float: left;
+  }
+
+  ul li a {
+    display: block;
+    color: white;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+  }
+
+  ul li a:hover:not(.active) {
+    background-color: #111111;
+  }
+
+  ul li a.active {
+    background-color: #04AA6D;
+  }
+</style>
+
+<body>
+
+  <ul>
+    <li><a href="./index.html">Menu</a></li>
+    <li><a href="./game.html">Game</a></li>
+    <li><a href="./shop.html">Shop</a></li>
+  </ul>
+
+</body>
+
+</html>
