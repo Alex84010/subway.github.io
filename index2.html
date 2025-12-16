@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Platformer Multijoueur P2P</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        #lobby {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 450px;
+        }
+        #lobby h1 {
+            color: #667eea;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        #lobby input {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        #lobby input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .avatar-selector {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+        }
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border: 3px solid #ddd;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .avatar:hover {
+            transform: scale(1.1);
+        }
+        .avatar.selected {
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            flex: 1;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .secondary-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f4ff;
+            border-radius: 10px;
+            color: #667eea;
+            font-weight: bold;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #myId {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            color: #856404;
+            word-break: break-all;
+        }
+        .id-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="lobby">
+        <h1>🎮 Platformer Duo P2P</h1>
+        <input type="text" id="username" placeholder="Entre ton pseudo" maxlength="15" value="Joueur">
+        
+        <div class="avatar-selector">
+            <div class="avatar selected" data-avatar="😎">😎</div>
+            <div class="avatar" data-avatar="🤖">🤖</div>
+            <div class="avatar" data-avatar="👾">👾</div>
+            <div class="avatar" data-avatar="🐱">🐱</div>
+            <div class="avatar" data-avatar="🦊">🦊</div>
+        </div>
+        
+        <div class="button-group">
+            <button id="hostBtn">🎯 Créer une partie</button>
+            <button id="joinBtn" class="secondary-btn">🔗 Rejoindre</button>
+        </div>
+        
+        <div id="joinSection" style="display: none;">
+            <input type="text" id="peerId" placeholder="Colle l'ID de ton ami ici">
+            <button id="connectBtn">Se connecter</button>
+        </div>
+        
+        <div id="status"></div>
+        <div id="myIdSection" style="display: none;">
+            <div class="id-label">📋 Ton ID (partage-le à ton ami) :</div>
+            <div id="myId"></div>
+        </div>
+    </div>
+
+    <div id="game-container" style="display: none;"></div>
+
+    <script>
+        let peer;
+        let conn;
+        let selectedAvatar = '😎';
+        let username = 'Joueur';
+        let isHost = false;
+        let gameStarted = false;
+        let opponentData = null;
+
+        // Sélection d'avatar
+        document.querySelectorAll('.avatar').forEach(avatar => {
+            avatar.addEventListener('click', function() {
+                document.querySelectorAll('.avatar').forEach(a => a.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedAvatar = this.dataset.avatar;
+            });
+        });
+
+        // Créer une partie (Host)
+        document.getElementById('hostBtn').addEventListener('click', () => {
+            username = document.getElementById('username').value.trim() || 'Joueur';
+            isHost = true;
+            
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                document.getElementById('myIdSection').style.display = 'block';
+                document.getElementById('myId').textContent = id;
+                document.getElementById('status').innerHTML = '⏳ En attente d\'un adversaire...';
+                document.getElementById('hostBtn').disabled = true;
+                document.getElementById('joinBtn').disabled = true;
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+            });
+
+            peer.on('error', (err) => {
+                console.error('Erreur PeerJS:', err);
+                document.getElementById('status').innerHTML = '❌ Erreur: ' + err.type;
+            });
+        });
+
+        // Rejoindre une partie
+        document.getElementById('joinBtn').addEventListener('click', () => {
+            document.getElementById('joinSection').style.display = 'block';
+            document.getElementById('hostBtn').disabled = true;
+        });
+
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            username = document.getElementById('username').value.trim() || 'Joueur';
+            const remotePeerId = document.getElementById('peerId').value.trim();
+            
+            if (!remotePeerId) {
+                alert('Entre l\'ID de ton ami !');
+                return;
+            }
+
+            isHost = false;
+            peer = new Peer();
+            
+            peer.on('open', () => {
+                conn = peer.connect(remotePeerId);
+                setupConnection();
+                document.getElementById('status').innerHTML = '<span class="spinner"></span>Connexion...';
+            });
+
+            peer.on('error', (err) => {
+                console.error('Erreur PeerJS:', err);
+                document.getElementById('status').innerHTML = '❌ Erreur: Impossible de se connecter';
+            });
+        });
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('status').innerHTML = '✅ Connecté ! Démarrage...';
+                
+                // Envoyer mes infos
+                conn.send({
+                    type: 'playerInfo',
+                    username: username,
+                    avatar: selectedAvatar
+                });
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'playerInfo') {
+                    opponentData = {
+                        username: data.username,
+                        avatar: data.avatar
+                    };
+                    
+                    // Si les 2 joueurs ont échangé leurs infos, démarrer
+                    if (!gameStarted) {
+                        gameStarted = true;
+                        setTimeout(() => {
+                            document.getElementById('lobby').style.display = 'none';
+                            document.getElementById('game-container').style.display = 'block';
+                            startGame();
+                        }, 1000);
+                    }
+                } else if (data.type === 'move') {
+                    if (window.updateOpponent) {
+                        window.updateOpponent(data.x, data.y);
+                    }
+                }
+            });
+
+            conn.on('close', () => {
+                alert('Ton adversaire s\'est déconnecté !');
+                location.reload();
+            });
+        }
+
+        function sendMove(x, y) {
+            if (conn && conn.open) {
+                conn.send({
+                    type: 'move',
+                    x: x,
+                    y: y
+                });
+            }
+        }
+
+        // Jeu Phaser
+        function startGame() {
+            const config = {
+                type: Phaser.AUTO,
+                width: 800,
+                height: 600,
+                parent: 'game-container',
+                physics: {
+                    default: 'arcade',
+                    arcade: {
+                        gravity: { y: 300 },
+                        debug: false
+                    }
+                },
+                scene: {
+                    preload: preload,
+                    create: create,
+                    update: update
+                }
+            };
+
+            const game = new Phaser.Game(config);
+            let player;
+            let opponent;
+            let cursors;
+            let platforms;
+            let playerText;
+            let opponentText;
+            let stars;
+            let score = 0;
+            let scoreText;
+            let opponentScore = 0;
+            let opponentScoreText;
+
+            function preload() {
+                // Créer des sprites simples
+                this.textures.generate('player', { data: ['2'], pixelWidth: 32 });
+                this.textures.generate('opponent', { data: ['2'], pixelWidth: 32 });
+                this.textures.generate('ground', { data: ['1'], pixelWidth: 64 });
+                this.textures.generate('star', { data: ['1'], pixelWidth: 16 });
+            }
+
+            function create() {
+                // Fond
+                this.add.rectangle(400, 300, 800, 600, 0x87CEEB);
+
+                // Plateformes
+                platforms = this.physics.add.staticGroup();
+                platforms.create(400, 568, 'ground').setScale(12.5, 1).setTint(0x228B22).refreshBody();
+                platforms.create(600, 400, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
+                platforms.create(50, 250, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
+                platforms.create(750, 220, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
+                platforms.create(400, 150, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
+
+                // Étoiles
+                stars = this.physics.add.group({
+                    key: 'star',
+                    repeat: 11,
+                    setXY: { x: 12, y: 0, stepX: 70 }
+                });
+
+                stars.children.iterate((child) => {
+                    child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+                    child.setTint(0xFFD700);
+                });
+
+                // Joueur local
+                const startX = isHost ? 100 : 700;
+                player = this.physics.add.sprite(startX, 450, 'player');
+                player.setBounce(0.2);
+                player.setCollideWorldBounds(true);
+                player.setTint(isHost ? 0x0000ff : 0xff0000);
+                
+                playerText = this.add.text(player.x, player.y - 40, username + ' ' + selectedAvatar, {
+                    fontSize: '16px',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                // Adversaire
+                const oppStartX = isHost ? 700 : 100;
+                opponent = this.physics.add.sprite(oppStartX, 450, 'opponent');
+                opponent.setTint(isHost ? 0xff0000 : 0x0000ff);
+                
+                opponentText = this.add.text(opponent.x, opponent.y - 40, 
+                    opponentData.username + ' ' + opponentData.avatar, {
+                    fontSize: '16px',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                // Collisions
+                this.physics.add.collider(player, platforms);
+                this.physics.add.collider(opponent, platforms);
+                this.physics.add.collider(stars, platforms);
+                
+                this.physics.add.overlap(player, stars, collectStar, null, this);
+
+                cursors = this.input.keyboard.createCursorKeys();
+
+                // Score
+                scoreText = this.add.text(16, 16, username + ': 0 ⭐', {
+                    fontSize: '24px',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 4
+                });
+
+                opponentScoreText = this.add.text(16, 50, opponentData.username + ': 0 ⭐', {
+                    fontSize: '24px',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 4
+                });
+
+                // Titre
+                this.add.text(400, 30, '🎮 Course aux Étoiles !', {
+                    fontSize: '32px',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 5
+                }).setOrigin(0.5);
+
+                // Fonction pour mettre à jour l'adversaire
+                window.updateOpponent = (x, y) => {
+                    opponent.x = x;
+                    opponent.y = y;
+                };
+            }
+
+            function collectStar(player, star) {
+                star.disableBody(true, true);
+                score += 10;
+                scoreText.setText(username + ': ' + score + ' ⭐');
+                
+                // Vérifier victoire
+                if (score >= 120) {
+                    this.physics.pause();
+                    this.add.text(400, 300, '🎉 TU AS GAGNÉ ! 🎉', {
+                        fontSize: '48px',
+                        fill: '#FFD700',
+                        stroke: '#000',
+                        strokeThickness: 6
+                    }).setOrigin(0.5);
+                }
+            }
+
+            function update() {
+                // Contrôles
+                if (cursors.left.isDown) {
+                    player.setVelocityX(-160);
+                } else if (cursors.right.isDown) {
+                    player.setVelocityX(160);
+                } else {
+                    player.setVelocityX(0);
+                }
+
+                if (cursors.up.isDown && player.body.touching.down) {
+                    player.setVelocityY(-330);
+                }
+
+                // Envoyer position
+                sendMove(player.x, player.y);
+
+                // Mettre à jour les textes
+                playerText.setPosition(player.x, player.y - 40);
+                opponentText.setPosition(opponent.x, opponent.y - 40);
+            }
+        }
+    </script>
+</body>
+</html>
