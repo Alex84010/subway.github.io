@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <title>Platformer Multijoueur</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
         body {
             margin: 0;
@@ -86,7 +87,7 @@
             cursor: pointer;
             transition: transform 0.2s;
         }
-        button:hover {
+        button:hover:not(:disabled) {
             transform: translateY(-2px);
         }
         button:disabled {
@@ -183,12 +184,19 @@
     <div id="game-container" style="display: none;"></div>
 
     <script>
-        // Configuration Supabase (serveur gratuit public pour la démo)
-        const SUPABASE_URL = 'https://eiwncfqbgxubppzgtcse.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpd25jZnFiZ3h1YnBwemd0Y3NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ0MDUwMjQsImV4cCI6MjA0OTk4MTAyNH0.6LNdvCBLZ4L6XKdMCNHFt3x0gDvPPGLCyG8Bw_uKNJQ';
-        
-        const { createClient } = supabase;
-        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Configuration Firebase (base de données publique pour démo)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDpL_YdVMk7gPZ8C9Rl3vLmT-5xqC_eXYs",
+            authDomain: "phaser-multiplayer-demo.firebaseapp.com",
+            databaseURL: "https://phaser-multiplayer-demo-default-rtdb.firebaseio.com",
+            projectId: "phaser-multiplayer-demo",
+            storageBucket: "phaser-multiplayer-demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abc123"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
 
         let selectedAvatar = '😎';
         let username = 'Joueur';
@@ -196,8 +204,8 @@
         let roomCode = '';
         let myId = generateId();
         let opponentData = null;
-        let channel = null;
-        let lastPositionUpdate = 0;
+        let roomRef = null;
+        let positionRef = null;
 
         // Sélection d'avatar
         document.querySelectorAll('.avatar').forEach(avatar => {
@@ -209,13 +217,35 @@
         });
 
         // Créer une partie
-        document.getElementById('hostBtn').addEventListener('click', () => {
+        document.getElementById('hostBtn').addEventListener('click', async () => {
             username = document.getElementById('username').value.trim() || 'Joueur';
             isHost = true;
             roomCode = generateCode();
             
-            joinChannel(roomCode);
-            
+            // Créer la room dans Firebase
+            roomRef = database.ref('rooms/' + roomCode);
+            await roomRef.set({
+                host: {
+                    id: myId,
+                    username: username,
+                    avatar: selectedAvatar,
+                    x: 100,
+                    y: 450
+                },
+                guest: null,
+                created: Date.now()
+            });
+
+            // Écouter l'arrivée d'un invité
+            roomRef.child('guest').on('value', (snapshot) => {
+                const guest = snapshot.val();
+                if (guest && guest.id !== myId) {
+                    opponentData = guest;
+                    document.getElementById('status').innerHTML = '✅ Adversaire trouvé : ' + guest.username + ' ' + guest.avatar;
+                    setTimeout(startGame, 1500);
+                }
+            });
+
             document.getElementById('roomCodeSection').style.display = 'block';
             document.getElementById('roomCode').textContent = roomCode;
             document.getElementById('status').innerHTML = '⏳ En attente d\'un adversaire...';
@@ -229,7 +259,7 @@
             document.getElementById('hostBtn').disabled = true;
         });
 
-        document.getElementById('connectBtn').addEventListener('click', () => {
+        document.getElementById('connectBtn').addEventListener('click', async () => {
             username = document.getElementById('username').value.trim() || 'Joueur';
             roomCode = document.getElementById('codeInput').value.trim().toUpperCase();
             
@@ -239,10 +269,39 @@
             }
 
             isHost = false;
-            joinChannel(roomCode);
-            
             document.getElementById('status').innerHTML = '<span class="spinner"></span>Connexion...';
             document.getElementById('connectBtn').disabled = true;
+
+            // Vérifier si la room existe
+            roomRef = database.ref('rooms/' + roomCode);
+            const snapshot = await roomRef.once('value');
+            
+            if (!snapshot.exists()) {
+                document.getElementById('status').innerHTML = '❌ Code invalide !';
+                document.getElementById('connectBtn').disabled = false;
+                return;
+            }
+
+            const roomData = snapshot.val();
+            if (roomData.guest) {
+                document.getElementById('status').innerHTML = '❌ Partie déjà pleine !';
+                document.getElementById('connectBtn').disabled = false;
+                return;
+            }
+
+            opponentData = roomData.host;
+
+            // Rejoindre la room
+            await roomRef.child('guest').set({
+                id: myId,
+                username: username,
+                avatar: selectedAvatar,
+                x: 700,
+                y: 450
+            });
+
+            document.getElementById('status').innerHTML = '✅ Connecté ! Démarrage...';
+            setTimeout(startGame, 1500);
         });
 
         function generateCode() {
@@ -255,67 +314,26 @@
         }
 
         function generateId() {
-            return 'player_' + Math.random().toString(36).substr(2, 9);
+            return 'p_' + Math.random().toString(36).substr(2, 9);
         }
 
-        function joinChannel(code) {
-            channel = supabaseClient.channel('room:' + code);
-
-            channel
-                .on('broadcast', { event: 'player-join' }, (payload) => {
-                    if (payload.payload.id !== myId && !opponentData) {
-                        opponentData = payload.payload;
-                        document.getElementById('status').innerHTML = '✅ Adversaire trouvé : ' + opponentData.username + ' ' + opponentData.avatar;
-                        
-                        // Envoyer nos infos en retour
-                        channel.send({
-                            type: 'broadcast',
-                            event: 'player-join',
-                            payload: {
-                                id: myId,
-                                username: username,
-                                avatar: selectedAvatar
-                            }
-                        });
-
-                        setTimeout(() => {
-                            startGame();
-                        }, 1500);
-                    }
-                })
-                .on('broadcast', { event: 'player-move' }, (payload) => {
-                    if (payload.payload.id !== myId && window.updateOpponent) {
-                        window.updateOpponent(payload.payload.x, payload.payload.y);
-                    }
-                })
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        // Annoncer notre présence
-                        channel.send({
-                            type: 'broadcast',
-                            event: 'player-join',
-                            payload: {
-                                id: myId,
-                                username: username,
-                                avatar: selectedAvatar
-                            }
-                        });
-                    }
+        function updatePosition(x, y) {
+            if (roomRef) {
+                const path = isHost ? 'host' : 'guest';
+                roomRef.child(path).update({
+                    x: Math.round(x),
+                    y: Math.round(y)
                 });
+            }
         }
 
-        function sendMove(x, y) {
-            const now = Date.now();
-            // Limiter à 20 updates par seconde pour ne pas surcharger
-            if (now - lastPositionUpdate > 50 && channel) {
-                lastPositionUpdate = now;
-                channel.send({
-                    type: 'broadcast',
-                    event: 'player-move',
-                    payload: {
-                        id: myId,
-                        x: Math.round(x),
-                        y: Math.round(y)
+        function listenToOpponent() {
+            if (roomRef) {
+                const path = isHost ? 'guest' : 'host';
+                roomRef.child(path).on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data && window.updateOpponent) {
+                        window.updateOpponent(data.x, data.y);
                     }
                 });
             }
@@ -323,6 +341,8 @@
 
         // Jeu Phaser
         function startGame() {
+            listenToOpponent();
+
             const config = {
                 type: Phaser.AUTO,
                 width: 800,
@@ -355,6 +375,7 @@
             let stars;
             let score = 0;
             let scoreText;
+            let lastUpdate = 0;
 
             function preload() {
                 this.textures.generate('player', { data: ['2'], pixelWidth: 32 });
@@ -438,7 +459,6 @@
                     strokeThickness: 3
                 }).setOrigin(0.5);
 
-                // Fonction globale pour mettre à jour l'adversaire
                 window.updateOpponent = (x, y) => {
                     if (opponent) {
                         opponent.x = x;
@@ -476,7 +496,12 @@
                     player.setVelocityY(-330);
                 }
 
-                sendMove(player.x, player.y);
+                // Envoyer position toutes les 50ms
+                const now = Date.now();
+                if (now - lastUpdate > 50) {
+                    lastUpdate = now;
+                    updatePosition(player.x, player.y);
+                }
 
                 playerText.setPosition(player.x, player.y - 40);
                 opponentText.setPosition(opponent.x, opponent.y - 40);
