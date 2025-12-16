@@ -2,9 +2,9 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Platformer Multijoueur P2P</title>
+    <title>Platformer Multijoueur</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-    <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
             margin: 0;
@@ -108,18 +108,19 @@
             align-items: center;
             justify-content: center;
         }
-        #myId {
+        #roomCode {
             background: #fff3cd;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
             font-family: monospace;
-            font-size: 14px;
+            font-size: 32px;
             color: #856404;
-            word-break: break-all;
+            letter-spacing: 8px;
+            font-weight: bold;
         }
-        .id-label {
-            font-size: 12px;
+        .code-label {
+            font-size: 14px;
             color: #666;
             margin-top: 10px;
         }
@@ -137,11 +138,21 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        #joinSection {
+            margin-top: 20px;
+        }
+        #codeInput {
+            font-size: 24px;
+            text-align: center;
+            letter-spacing: 8px;
+            font-family: monospace;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
     <div id="lobby">
-        <h1>🎮 Platformer Duo P2P</h1>
+        <h1>🎮 Platformer Duo</h1>
         <input type="text" id="username" placeholder="Entre ton pseudo" maxlength="15" value="Joueur">
         
         <div class="avatar-selector">
@@ -158,27 +169,35 @@
         </div>
         
         <div id="joinSection" style="display: none;">
-            <input type="text" id="peerId" placeholder="Colle l'ID de ton ami ici">
+            <input type="text" id="codeInput" placeholder="CODE" maxlength="4">
             <button id="connectBtn">Se connecter</button>
         </div>
         
         <div id="status"></div>
-        <div id="myIdSection" style="display: none;">
-            <div class="id-label">📋 Ton ID (partage-le à ton ami) :</div>
-            <div id="myId"></div>
+        <div id="roomCodeSection" style="display: none;">
+            <div class="code-label">📋 Code de la partie (partage-le à ton ami) :</div>
+            <div id="roomCode"></div>
         </div>
     </div>
 
     <div id="game-container" style="display: none;"></div>
 
     <script>
-        let peer;
-        let conn;
+        // Configuration Supabase (serveur gratuit public pour la démo)
+        const SUPABASE_URL = 'https://eiwncfqbgxubppzgtcse.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpd25jZnFiZ3h1YnBwemd0Y3NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ0MDUwMjQsImV4cCI6MjA0OTk4MTAyNH0.6LNdvCBLZ4L6XKdMCNHFt3x0gDvPPGLCyG8Bw_uKNJQ';
+        
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
         let selectedAvatar = '😎';
         let username = 'Joueur';
         let isHost = false;
-        let gameStarted = false;
+        let roomCode = '';
+        let myId = generateId();
         let opponentData = null;
+        let channel = null;
+        let lastPositionUpdate = 0;
 
         // Sélection d'avatar
         document.querySelectorAll('.avatar').forEach(avatar => {
@@ -189,30 +208,19 @@
             });
         });
 
-        // Créer une partie (Host)
+        // Créer une partie
         document.getElementById('hostBtn').addEventListener('click', () => {
             username = document.getElementById('username').value.trim() || 'Joueur';
             isHost = true;
+            roomCode = generateCode();
             
-            peer = new Peer();
+            joinChannel(roomCode);
             
-            peer.on('open', (id) => {
-                document.getElementById('myIdSection').style.display = 'block';
-                document.getElementById('myId').textContent = id;
-                document.getElementById('status').innerHTML = '⏳ En attente d\'un adversaire...';
-                document.getElementById('hostBtn').disabled = true;
-                document.getElementById('joinBtn').disabled = true;
-            });
-
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnection();
-            });
-
-            peer.on('error', (err) => {
-                console.error('Erreur PeerJS:', err);
-                document.getElementById('status').innerHTML = '❌ Erreur: ' + err.type;
-            });
+            document.getElementById('roomCodeSection').style.display = 'block';
+            document.getElementById('roomCode').textContent = roomCode;
+            document.getElementById('status').innerHTML = '⏳ En attente d\'un adversaire...';
+            document.getElementById('hostBtn').disabled = true;
+            document.getElementById('joinBtn').disabled = true;
         });
 
         // Rejoindre une partie
@@ -223,75 +231,92 @@
 
         document.getElementById('connectBtn').addEventListener('click', () => {
             username = document.getElementById('username').value.trim() || 'Joueur';
-            const remotePeerId = document.getElementById('peerId').value.trim();
+            roomCode = document.getElementById('codeInput').value.trim().toUpperCase();
             
-            if (!remotePeerId) {
-                alert('Entre l\'ID de ton ami !');
+            if (roomCode.length !== 4) {
+                alert('Entre un code à 4 caractères !');
                 return;
             }
 
             isHost = false;
-            peer = new Peer();
+            joinChannel(roomCode);
             
-            peer.on('open', () => {
-                conn = peer.connect(remotePeerId);
-                setupConnection();
-                document.getElementById('status').innerHTML = '<span class="spinner"></span>Connexion...';
-            });
-
-            peer.on('error', (err) => {
-                console.error('Erreur PeerJS:', err);
-                document.getElementById('status').innerHTML = '❌ Erreur: Impossible de se connecter';
-            });
+            document.getElementById('status').innerHTML = '<span class="spinner"></span>Connexion...';
+            document.getElementById('connectBtn').disabled = true;
         });
 
-        function setupConnection() {
-            conn.on('open', () => {
-                document.getElementById('status').innerHTML = '✅ Connecté ! Démarrage...';
-                
-                // Envoyer mes infos
-                conn.send({
-                    type: 'playerInfo',
-                    username: username,
-                    avatar: selectedAvatar
-                });
-            });
+        function generateCode() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 4; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
 
-            conn.on('data', (data) => {
-                if (data.type === 'playerInfo') {
-                    opponentData = {
-                        username: data.username,
-                        avatar: data.avatar
-                    };
-                    
-                    // Si les 2 joueurs ont échangé leurs infos, démarrer
-                    if (!gameStarted) {
-                        gameStarted = true;
+        function generateId() {
+            return 'player_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function joinChannel(code) {
+            channel = supabaseClient.channel('room:' + code);
+
+            channel
+                .on('broadcast', { event: 'player-join' }, (payload) => {
+                    if (payload.payload.id !== myId && !opponentData) {
+                        opponentData = payload.payload;
+                        document.getElementById('status').innerHTML = '✅ Adversaire trouvé : ' + opponentData.username + ' ' + opponentData.avatar;
+                        
+                        // Envoyer nos infos en retour
+                        channel.send({
+                            type: 'broadcast',
+                            event: 'player-join',
+                            payload: {
+                                id: myId,
+                                username: username,
+                                avatar: selectedAvatar
+                            }
+                        });
+
                         setTimeout(() => {
-                            document.getElementById('lobby').style.display = 'none';
-                            document.getElementById('game-container').style.display = 'block';
                             startGame();
-                        }, 1000);
+                        }, 1500);
                     }
-                } else if (data.type === 'move') {
-                    if (window.updateOpponent) {
-                        window.updateOpponent(data.x, data.y);
+                })
+                .on('broadcast', { event: 'player-move' }, (payload) => {
+                    if (payload.payload.id !== myId && window.updateOpponent) {
+                        window.updateOpponent(payload.payload.x, payload.payload.y);
                     }
-                }
-            });
-
-            conn.on('close', () => {
-                alert('Ton adversaire s\'est déconnecté !');
-                location.reload();
-            });
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        // Annoncer notre présence
+                        channel.send({
+                            type: 'broadcast',
+                            event: 'player-join',
+                            payload: {
+                                id: myId,
+                                username: username,
+                                avatar: selectedAvatar
+                            }
+                        });
+                    }
+                });
         }
 
         function sendMove(x, y) {
-            if (conn && conn.open) {
-                conn.send({
-                    type: 'move',
-                    x: x,
-                    y: y
+            const now = Date.now();
+            // Limiter à 20 updates par seconde pour ne pas surcharger
+            if (now - lastPositionUpdate > 50 && channel) {
+                lastPositionUpdate = now;
+                channel.send({
+                    type: 'broadcast',
+                    event: 'player-move',
+                    payload: {
+                        id: myId,
+                        x: Math.round(x),
+                        y: Math.round(y)
+                    }
                 });
             }
         }
@@ -317,6 +342,9 @@
                 }
             };
 
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+
             const game = new Phaser.Game(config);
             let player;
             let opponent;
@@ -327,11 +355,8 @@
             let stars;
             let score = 0;
             let scoreText;
-            let opponentScore = 0;
-            let opponentScoreText;
 
             function preload() {
-                // Créer des sprites simples
                 this.textures.generate('player', { data: ['2'], pixelWidth: 32 });
                 this.textures.generate('opponent', { data: ['2'], pixelWidth: 32 });
                 this.textures.generate('ground', { data: ['1'], pixelWidth: 64 });
@@ -339,10 +364,8 @@
             }
 
             function create() {
-                // Fond
                 this.add.rectangle(400, 300, 800, 600, 0x87CEEB);
 
-                // Plateformes
                 platforms = this.physics.add.staticGroup();
                 platforms.create(400, 568, 'ground').setScale(12.5, 1).setTint(0x228B22).refreshBody();
                 platforms.create(600, 400, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
@@ -350,7 +373,6 @@
                 platforms.create(750, 220, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
                 platforms.create(400, 150, 'ground').setScale(2, 0.5).setTint(0x228B22).refreshBody();
 
-                // Étoiles
                 stars = this.physics.add.group({
                     key: 'star',
                     repeat: 11,
@@ -362,7 +384,6 @@
                     child.setTint(0xFFD700);
                 });
 
-                // Joueur local
                 const startX = isHost ? 100 : 700;
                 player = this.physics.add.sprite(startX, 450, 'player');
                 player.setBounce(0.2);
@@ -376,7 +397,6 @@
                     strokeThickness: 3
                 }).setOrigin(0.5);
 
-                // Adversaire
                 const oppStartX = isHost ? 700 : 100;
                 opponent = this.physics.add.sprite(oppStartX, 450, 'opponent');
                 opponent.setTint(isHost ? 0xff0000 : 0x0000ff);
@@ -389,7 +409,6 @@
                     strokeThickness: 3
                 }).setOrigin(0.5);
 
-                // Collisions
                 this.physics.add.collider(player, platforms);
                 this.physics.add.collider(opponent, platforms);
                 this.physics.add.collider(stars, platforms);
@@ -398,7 +417,6 @@
 
                 cursors = this.input.keyboard.createCursorKeys();
 
-                // Score
                 scoreText = this.add.text(16, 16, username + ': 0 ⭐', {
                     fontSize: '24px',
                     fill: '#fff',
@@ -406,14 +424,6 @@
                     strokeThickness: 4
                 });
 
-                opponentScoreText = this.add.text(16, 50, opponentData.username + ': 0 ⭐', {
-                    fontSize: '24px',
-                    fill: '#fff',
-                    stroke: '#000',
-                    strokeThickness: 4
-                });
-
-                // Titre
                 this.add.text(400, 30, '🎮 Course aux Étoiles !', {
                     fontSize: '32px',
                     fill: '#fff',
@@ -421,10 +431,19 @@
                     strokeThickness: 5
                 }).setOrigin(0.5);
 
-                // Fonction pour mettre à jour l'adversaire
+                this.add.text(400, 570, 'Code: ' + roomCode, {
+                    fontSize: '20px',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                // Fonction globale pour mettre à jour l'adversaire
                 window.updateOpponent = (x, y) => {
-                    opponent.x = x;
-                    opponent.y = y;
+                    if (opponent) {
+                        opponent.x = x;
+                        opponent.y = y;
+                    }
                 };
             }
 
@@ -433,7 +452,6 @@
                 score += 10;
                 scoreText.setText(username + ': ' + score + ' ⭐');
                 
-                // Vérifier victoire
                 if (score >= 120) {
                     this.physics.pause();
                     this.add.text(400, 300, '🎉 TU AS GAGNÉ ! 🎉', {
@@ -446,7 +464,6 @@
             }
 
             function update() {
-                // Contrôles
                 if (cursors.left.isDown) {
                     player.setVelocityX(-160);
                 } else if (cursors.right.isDown) {
@@ -459,10 +476,8 @@
                     player.setVelocityY(-330);
                 }
 
-                // Envoyer position
                 sendMove(player.x, player.y);
 
-                // Mettre à jour les textes
                 playerText.setPosition(player.x, player.y - 40);
                 opponentText.setPosition(opponent.x, opponent.y - 40);
             }
